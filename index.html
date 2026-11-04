@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selección Mexicana - Partidos</title>
+</head>
+<body>
+
+    <h1>Partidos Selección Mexicana</h1>
+
+    <div>
+        <label for="search-input">Buscar:</label>
+        <input type="text" id="search-input" placeholder="Rival o estadio">
+        <button id="refresh-btn">Recargar Data</button>
+    </div>
+
+    <br>
+
+    <div>
+        <span>Filtro:</span>
+        <button data-filter="all" class="filter-btn">Todos</button>
+        <button data-filter="MEX-WIN" class="filter-btn">Victorias</button>
+        <button data-filter="MEX-DRAW" class="filter-btn">Empates</button>
+        <button data-filter="MEX-LOSS" class="filter-btn">Derrotas</button>
+    </div>
+
+    <hr>
+
+    <div>
+        <p>Partidos México: <span id="stat-total">0</span></p>
+        <p>Goles a Favor: <span id="stat-goals-for">0</span></p>
+        <p>Goles en Contra: <span id="stat-goals-against">0</span></p>
+    </div>
+
+    <hr>
+
+    <div id="content-area"></div>
+
+    <script>
+        var state = {
+            rawResults: [],
+            filteredResults: [],
+            timelinesCache: {},
+            activeFilter: 'all',
+            searchQuery: ''
+        };
+
+        var MOCK_API = {
+            matches: {
+                Results: [
+                    {
+                        IdMatch: "match-mex-001",
+                        Date: "2026-06-11T20:00:00Z",
+                        StageName: "Copa Mundial FIFA 2026 - Fase de Grupos",
+                        StadiumName: "Estadio Azteca",
+                        City: "Ciudad de México",
+                        MatchStatus: "Finalizado",
+                        Home: { IdCountry: "MEX", TeamName: "México", Score: 2 },
+                        Away: { IdCountry: "RSA", TeamName: "Sudáfrica", Score: 1 }
+                    },
+                    {
+                        IdMatch: "match-mex-002",
+                        Date: "2026-06-18T19:00:00Z",
+                        StageName: "Copa Mundial FIFA 2026 - Fase de Grupos",
+                        StadiumName: "Estadio Akron",
+                        City: "Guadalajara",
+                        MatchStatus: "Finalizado",
+                        Home: { IdCountry: "GER", TeamName: "Alemania", Score: 1 },
+                        Away: { IdCountry: "MEX", TeamName: "México", Score: 1 }
+                    },
+                    {
+                        IdMatch: "match-mex-003",
+                        Date: "2026-06-24T21:00:00Z",
+                        StageName: "Copa Mundial FIFA 2026 - Fase de Grupos",
+                        StadiumName: "Estadio BBVA",
+                        City: "Monterrey",
+                        MatchStatus: "Finalizado",
+                        Home: { IdCountry: "MEX", TeamName: "México", Score: 3 },
+                        Away: { IdCountry: "KOR", TeamName: "Corea del Sur", Score: 0 }
+                    },
+                    {
+                        IdMatch: "match-other-004",
+                        Date: "2026-06-25T15:00:00Z",
+                        StageName: "Fase de Grupos",
+                        StadiumName: "MetLife Stadium",
+                        City: "New Jersey",
+                        MatchStatus: "Finalizado",
+                        Home: { IdCountry: "ARG", TeamName: "Argentina", Score: 2 },
+                        Away: { IdCountry: "FRA", TeamName: "Francia", Score: 1 }
+                    },
+                    {
+                        IdMatch: "match-mex-005",
+                        Date: "2026-03-22T18:30:00Z",
+                        StageName: "Amistoso Internacional",
+                        StadiumName: "AT&T Stadium",
+                        City: "Arlington, TX",
+                        MatchStatus: "Finalizado",
+                        Home: { IdCountry: "USA", TeamName: "Estados Unidos", Score: 0 },
+                        Away: { IdCountry: "MEX", TeamName: "México", Score: 2 }
+                    }
+                ]
+            },
+            timelines: {
+                "match-mex-001": {
+                    IdMatch: "match-mex-001",
+                    Events: [
+                        { Minute: "14'", Type: "Goal", IdCountry: "MEX", Player: "Edson Álvarez", Detail: "Remate de cabeza" },
+                        { Minute: "38'", Type: "YellowCard", IdCountry: "MEX", Player: "Edson Álvarez", Detail: "Falta táctica" },
+                        { Minute: "52'", Type: "Goal", IdCountry: "RSA", Player: "Percy Tau", Detail: "Disparo cruzado" },
+                        { Minute: "65'", Type: "YellowCard", IdCountry: "RSA", Player: "Mokoena", Detail: "Entrada a destiempo" },
+                        { Minute: "79'", Type: "Goal", IdCountry: "MEX", Player: "Santiago Giménez", Detail: "Definición raso" },
+                        { Minute: "89'", Type: "RedCard", IdCountry: "RSA", Player: "Morena", Detail: "Doble tarjeta amarilla" }
+                    ]
+                },
+                "match-mex-002": {
+                    IdMatch: "match-mex-002",
+                    Events: [
+                        { Minute: "22'", Type: "Goal", IdCountry: "GER", Player: "Jamal Musiala", Detail: "Jugada individual" },
+                        { Minute: "31'", Type: "YellowCard", IdCountry: "MEX", Player: "Johan Vásquez", Detail: "Barrida tardía" },
+                        { Minute: "58'", Type: "Goal", IdCountry: "MEX", Player: "Hirving Lozano", Detail: "Contraataque" },
+                        { Minute: "74'", Type: "YellowCard", IdCountry: "GER", Player: "Antonio Rüdiger", Detail: "Reclamo" },
+                        { Minute: "82'", Type: "YellowCard", IdCountry: "MEX", Player: "Jorge Sánchez", Detail: "Falta" }
+                    ]
+                },
+                "match-mex-003": {
+                    IdMatch: "match-mex-003",
+                    Events: [
+                        { Minute: "10'", Type: "Goal", IdCountry: "MEX", Player: "Santiago Giménez", Detail: "Penalti" },
+                        { Minute: "27'", Type: "YellowCard", IdCountry: "KOR", Player: "Kim Min-jae", Detail: "Sujetón" },
+                        { Minute: "44'", Type: "Goal", IdCountry: "MEX", Player: "Luis Chávez", Detail: "Tiro libre directo" },
+                        { Minute: "71'", Type: "Goal", IdCountry: "MEX", Player: "César Huerta", Detail: "Disparo de volea" },
+                        { Minute: "85'", Type: "YellowCard", IdCountry: "MEX", Player: "Erick Sánchez", Detail: "Falta" }
+                    ]
+                },
+                "match-mex-005": {
+                    IdMatch: "match-mex-005",
+                    Events: [
+                        { Minute: "41'", Type: "Goal", IdCountry: "MEX", Player: "Santiago Giménez", Detail: "Remate de izquierda" },
+                        { Minute: "55'", Type: "YellowCard", IdCountry: "USA", Player: "Weston McKennie", Detail: "Juego peligroso" },
+                        { Minute: "68'", Type: "Goal", IdCountry: "MEX", Player: "Orbelín Pineda", Detail: "Disparo bombeado" },
+                        { Minute: "80'", Type: "YellowCard", IdCountry: "MEX", Player: "Uriel Antuna", Detail: "Retardo" },
+                        { Minute: "88'", Type: "RedCard", IdCountry: "USA", Player: "Sergiño Dest", Detail: "Conducta antideportiva" }
+                    ]
+                }
+            }
+        };
+
+        function fetchMatchesAPI() {
+            try {
+                return fetch('/api/v1/matches')
+                    .then(function(response) {
+                        if (!response.ok) {
+                            throw new Error("HTTP error " + response.status);
+                        }
+                        return response.json();
+                    })
+                    .then(function(data) {
+                        var filtered = [];
+                        if (data && data.Results) {
+                            for (var i = 0; i < data.Results.length; i++) {
+                                var match = data.Results[i];
+                                if ((match.Home && match.Home.IdCountry === 'MEX') || (match.Away && match.Away.IdCountry === 'MEX')) {
+                                    filtered.push(match);
+                                }
+                            }
+                        }
+                        return filtered;
+                    })
+                    .catch(function() {
+                        var data = MOCK_API.matches;
+                        var filtered = [];
+                        for (var i = 0; i < data.Results.length; i++) {
+                            var match = data.Results[i];
+                            if ((match.Home && match.Home.IdCountry === 'MEX') || (match.Away && match.Away.IdCountry === 'MEX')) {
+                                filtered.push(match);
+                            }
+                        }
+                        return filtered;
+                    });
+            } catch (err) {
+                var data = MOCK_API.matches;
+                var filtered = [];
+                for (var i = 0; i < data.Results.length; i++) {
+                    var match = data.Results[i];
+                    if ((match.Home && match.Home.IdCountry === 'MEX') || (match.Away && match.Away.IdCountry === 'MEX')) {
+                        filtered.push(match);
+                    }
+                }
+                return Promise.resolve(filtered);
+            }
+        }
+
+        function fetchMatchTimelineAPI(idMatch) {
+            if (state.timelinesCache[idMatch]) {
+                return Promise.resolve(state.timelinesCache[idMatch]);
+            }
+
+            try {
+                return fetch('/timelines/' + idMatch)
+                    .then(function(response) {
+                        if (!response.ok) {
+                            throw new Error("HTTP error " + response.status);
+                        }
+                        return response.json();
+                    })
+                    .then(function(timelineData) {
+                        state.timelinesCache[idMatch] = timelineData;
+                        return timelineData;
+                    })
+                    .catch(function() {
+                        var timelineData = MOCK_API.timelines[idMatch] || { IdMatch: idMatch, Events: [] };
+                        state.timelinesCache[idMatch] = timelineData;
+                        return timelineData;
+                    });
+            } catch (err) {
+                var timelineData = MOCK_API.timelines[idMatch] || { IdMatch: idMatch, Events: [] };
+                state.timelinesCache[idMatch] = timelineData;
+                return Promise.resolve(timelineData);
+            }
+        }
+
+        function renderLoading() {
+            var container = document.getElementById('content-area');
+            container.innerHTML = '<p>Cargando información de partidos de México...</p>';
+        }
+
+        function renderMatches(matches) {
+            var container = document.getElementById('content-area');
+
+            if (!matches || matches.length === 0) {
+                container.innerHTML = '<p>No hay partidos registrados para mostrar.</p>';
+                return;
+            }
+
+            var html = '';
+            for (var i = 0; i < matches.length; i++) {
+                var match = matches[i];
+                var dateObj = new Date(match.Date);
+                var fecha = dateObj.toLocaleDateString('es-MX');
+                var horario = dateObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+
+                var isHomeMex = match.Home.IdCountry === 'MEX';
+                var rival = isHomeMex ? match.Away.TeamName : match.Home.TeamName;
+                var marcadorFinal = match.Home.TeamName + ' ' + match.Home.Score + ' - ' + match.Away.Score + ' ' + match.Away.TeamName;
+
+                var events = (match.Timeline && match.Timeline.Events) ? match.Timeline.Events : [];
+                var goalsHTML = '';
+                var cardsHTML = '';
+
+                for (var j = 0; j < events.length; j++) {
+                    var ev = events[j];
+                    if (ev.Type === 'Goal') {
+                        goalsHTML += '<li>Minuto ' + ev.Minute + ': ' + ev.Player + ' (' + ev.IdCountry + ') - ' + ev.Detail + '</li>';
+                    } else if (ev.Type === 'YellowCard' || ev.Type === 'RedCard') {
+                        var tipoTarjeta = ev.Type === 'YellowCard' ? 'Tarjeta Amarilla' : 'Tarjeta Roja';
+                        cardsHTML += '<li>' + tipoTarjeta + ' - Minuto ' + ev.Minute + ': ' + ev.Player + ' (' + ev.IdCountry + ') - ' + ev.Detail + '</li>';
+                    }
+                }
+
+                if (goalsHTML === '') {
+                    goalsHTML = '<li>Sin goles</li>';
+                }
+                if (cardsHTML === '') {
+                    cardsHTML = '<li>Sin tarjetas</li>';
+                }
+
+                html += '<div>' +
+                    '<h2>Partido vs ' + rival + '</h2>' +
+                    '<p>Torneo / Etapa: ' + match.StageName + '</p>' +
+                    '<p>Fecha: ' + fecha + '</p>' +
+                    '<p>Horario: ' + horario + '</p>' +
+                    '<p>Estadio: ' + match.StadiumName + ' (' + match.City + ')</p>' +
+                    '<p>Marcador final: ' + marcadorFinal + '</p>' +
+                    '<h3>Goles Anotados:</h3>' +
+                    '<ul>' + goalsHTML + '</ul>' +
+                    '<h3>Tarjetas Amarillas y Rojas:</h3>' +
+                    '<ul>' + cardsHTML + '</ul>' +
+                    '<hr>' +
+                '</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        function updateSummaryStats(matches) {
+            var total = matches.length;
+            var goalsFor = 0;
+            var goalsAgainst = 0;
+
+            for (var i = 0; i < matches.length; i++) {
+                var m = matches[i];
+                var isHomeMex = m.Home.IdCountry === 'MEX';
+                goalsFor += isHomeMex ? m.Home.Score : m.Away.Score;
+                goalsAgainst += isHomeMex ? m.Away.Score : m.Home.Score;
+            }
+
+            document.getElementById('stat-total').textContent = total;
+            document.getElementById('stat-goals-for').textContent = goalsFor;
+            document.getElementById('stat-goals-against').textContent = goalsAgainst;
+        }
+
+        function processAndFilterData() {
+            var list = [];
+            for (var i = 0; i < state.rawResults.length; i++) {
+                list.push(state.rawResults[i]);
+            }
+
+            var query = state.searchQuery.toLowerCase().replace(/^\s+|\s+$/g, '');
+            if (query !== '') {
+                var temp = [];
+                for (var j = 0; j < list.length; j++) {
+                    var m = list[j];
+                    var opponent = m.Home.IdCountry === 'MEX' ? m.Away.TeamName : m.Home.TeamName;
+                    var stadium = m.StadiumName;
+                    var city = m.City;
+                    if (opponent.toLowerCase().indexOf(query) !== -1 ||
+                        stadium.toLowerCase().indexOf(query) !== -1 ||
+                        city.toLowerCase().indexOf(query) !== -1) {
+                        temp.push(m);
+                    }
+                }
+                list = temp;
+            }
+
+            if (state.activeFilter !== 'all') {
+                var filteredByResult = [];
+                for (var k = 0; k < list.length; k++) {
+                    var matchObj = list[k];
+                    var isHomeMex = matchObj.Home.IdCountry === 'MEX';
+                    var mexScore = isHomeMex ? matchObj.Home.Score : matchObj.Away.Score;
+                    var oppScore = isHomeMex ? matchObj.Away.Score : matchObj.Home.Score;
+
+                    if (state.activeFilter === 'MEX-WIN' && mexScore > oppScore) {
+                        filteredByResult.push(matchObj);
+                    } else if (state.activeFilter === 'MEX-DRAW' && mexScore === oppScore) {
+                        filteredByResult.push(matchObj);
+                    } else if (state.activeFilter === 'MEX-LOSS' && mexScore < oppScore) {
+                        filteredByResult.push(matchObj);
+                    }
+                }
+                list = filteredByResult;
+            }
+
+            state.filteredResults = list;
+            updateSummaryStats(list);
+            renderMatches(list);
+        }
+
+        function loadData() {
+            renderLoading();
+
+            fetchMatchesAPI()
+                .then(function(mexicoMatches) {
+                    var timelinePromises = [];
+                    for (var i = 0; i < mexicoMatches.length; i++) {
+                        (function(match) {
+                            var promise = fetchMatchTimelineAPI(match.IdMatch).then(function(timeline) {
+                                match.Timeline = timeline;
+                                return match;
+                            });
+                            timelinePromises.push(promise);
+                        })(mexicoMatches[i]);
+                    }
+                    return Promise.all(timelinePromises);
+                })
+                .then(function(matchesWithTimelines) {
+                    state.rawResults = matchesWithTimelines;
+                    processAndFilterData();
+                })
+                .catch(function(err) {
+                    var container = document.getElementById('content-area');
+                    container.innerHTML = '<p>Error al obtener los datos de partidos.</p>';
+                });
+        }
+
+        function setupEventListeners() {
+            var searchInput = document.getElementById('search-input');
+            if (searchInput) {
+                searchInput.oninput = function(e) {
+                    state.searchQuery = e.target.value;
+                    processAndFilterData();
+                };
+            }
+
+            var refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.onclick = function() {
+                    state.timelinesCache = {};
+                    loadData();
+                };
+            }
+
+            var filterBtns = document.querySelectorAll('.filter-btn');
+            for (var i = 0; i < filterBtns.length; i++) {
+                (function(btn) {
+                    btn.onclick = function(e) {
+                        var target = e.currentTarget || e.srcElement;
+                        state.activeFilter = target.getAttribute('data-filter');
+                        processAndFilterData();
+                    };
+                })(filterBtns[i]);
+            }
+        }
+
+        window.onload = function() {
+            setupEventListeners();
+            loadData();
+        };
+    </script>
+</body>
+</html>
